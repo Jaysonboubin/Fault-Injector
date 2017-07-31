@@ -1,10 +1,10 @@
 #!/usr/bin/python
-#from dronekit_sitl import SITL
+from dronekit_sitl import SITL
 # Import DroneKit-Python
 from dronekit import connect, VehicleMode
 from Tkinter import *
-import time, thread, sys
-#from curses import ascii
+import time, thread, sys, struct, os
+from curses import ascii
 from pymavlink import mavparm, mavutil
 from pymavlink.dialects.v10 import common as mavlink
 
