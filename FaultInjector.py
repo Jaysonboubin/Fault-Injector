@@ -1,5 +1,5 @@
 #!/usr/bin/python
-from dronekit_sitl import SITL
+#from dronekit_sitl import SITL
 # Import DroneKit-Python
 from dronekit import connect, VehicleMode
 from Tkinter import *
@@ -13,8 +13,6 @@ from pymavlink.dialects.v10 import common as mavlink
 updatePanes = None
 #dronekit vehicle
 vehicle = None
-#SITL environment variable
-sitl = None
 #TK window root 
 root = None
 #bool which denotes whether you are connected to SITL/Mavproxy or not
@@ -32,18 +30,13 @@ gcsfs = bfs = tfs = rfs = gpsfs = "Inactive"
 
 #connects to a drone sitting at ip:port and dispatches a thread to display it's
 #inforamtion to the readout window
-def connectToDrone(sip, sport, dkip, dkport):
-  #sitl connection
-  global sitl
-  #connect to SITL at ip:port over TCP using an ardupilotmega
-  sitl = mavutil.mavlink_connection('tcp:'+sip+':'+sport, dialect='ardupilotmega', write=True, input=False)
-  print("Waiting for APM heartbeat")
-  msg = sitl.recv_match(type='HEARTBEAT', blocking=False)
-  print("Heartbeat from APM")
-   	
+def connectToDrone(dkip, dkport):
+
+   
   #Dronekit connection
   global vehicle
   #connect to vehicle at ip:port
+  print("Attempting To Connect to Dronekit")
   vehicle = connect(dkip+':'+dkport, wait_ready=True)
   #set connected bool to True
   global connected 
@@ -70,8 +63,6 @@ def disconnect():
   updateReadoutWindow(updatePanes[0], "Disconneced")
   global connected
   connected = False
-  #Disconnect SITL
-  sitl = None;
 
 #continually updates the readout with vehicle information
 def updateVehicleStatus(vehicle):
@@ -123,7 +114,7 @@ def loadToolbar(root):
   mpToolbar = Frame(toolbar);
   sToolbar = Frame(toolbar);
 
-  mpLabel = Label(mpToolbar, text = "Connect to Mavproxy: ")
+  mpLabel = Label(mpToolbar, text = "Connect to Drone: ")
   mpLabel.pack(side=LEFT, padx=2, pady=2)
   #creates IP label
   MPipLabel = Label(mpToolbar, text="IP Address")
@@ -146,39 +137,17 @@ def loadToolbar(root):
   MPportBox.pack(side=LEFT, padx=2, pady=2)
   
   #creates connection button
-  MPcon = Button(mpToolbar, text="Connect", width=6, command=lambda: connectToDrone(SipBox.get(), SportBox.get(), MPipBox.get(), MPportBox.get()))
+  MPcon = Button(mpToolbar, text="Connect", width=6, command=lambda: connectToDrone(MPipBox.get(), MPportBox.get()))
   MPcon.pack(side=LEFT, padx=2, pady=2)  
   #creates disconnect button
   MPdis = Button(mpToolbar, text="Disconnect", width=6, command=disconnect)
   MPdis.pack(side=LEFT, padx=2, pady=2)
   
-  sLabel = Label(sToolbar, text="Connect to SITL:         ")
-  sLabel.pack(side=LEFT, padx=2, pady=2)  
-
-  SipLabel = Label(sToolbar, text="IP Address")
-  SipLabel.pack(side=LEFT, padx=2, pady=2)
-  
-  #creates IP entry box
-  SipBox = Entry(sToolbar)
-  SipBox.delete(0, END)
-  SipBox.insert(0, "127.0.0.1")  
-  SipBox.pack(side=LEFT, padx=2, pady=2)
- 
-  #creates port label
-  SportLabel = Label(sToolbar, text="Port")
-  SportLabel.pack(side=LEFT, padx=2, pady=2)
-
-  #creates port entry box
-  SportBox = Entry(sToolbar)
-  SportBox.delete(0, END)
-  SportBox.insert(0, "5763")  
-  SportBox.pack(side=LEFT, padx=2, pady=2)
-  
   #creates connection button
   mpToolbar.pack(side=TOP, fill=X)
   sToolbar.pack(side=TOP, fill=X)
   toolbar.pack(side=TOP, fill=X)
-
+  
 #creates a split panned window, with a text box on the left, and fault buttons on the left
 def loadInfoPane(root):
   window = PanedWindow(orient=HORIZONTAL)
@@ -213,8 +182,8 @@ def wind(windSPD, windDIR):
   #create mavproxy parameter dictionary
   mav_param = mavparm.MAVParmDict()
   #set mavproxy parameters over sitl
-  mav_param.mavset(sitl, "SIM_WIND_DIR", float(windDIR), retries = 100)
-  mav_param.mavset(sitl, "SIM_WIND_SPD", float(windSPD), retries = 100)
+  vehicle.parameters['SIM_WIND_DIR'] = float(windDIR)
+  vehicle.parameters['SIM_WIND_SPD'] = float(windSPD)
 
 def gps():
   #get global button and failsafe readout text
@@ -224,19 +193,19 @@ def gps():
   # if button's text is to Disable GPS
   if gpsButton.configure('text')[-1] == 'Disable GPS':
         #set SITL to disable gps
-  	if mav_param.mavset(sitl, "SIM_GPS_DISABLE", float(1), retries = 100):
-		#change button text
-		gpsButton.configure(text='Enable GPS')
-		#change readout text
-		gpsfs = "Active"
+        vehicle.parameters['SIM_GPS_DISABLE'] = float(1)
+	#change button text
+	gpsButton.configure(text='Enable GPS')
+	#change readout text
+	gpsfs = "Active"
   #if text is Enable gps
   else:
 	#set SITL to enable gps
-  	if mav_param.mavset(sitl, "SIM_GPS_DISABLE", float(0), retries = 100):
-		#change readout text
-		gpsfs = "Inactive"
-                #change button text
-		gpsButton.configure(text='Disable GPS')
+  	vehicle.parameters['SIM_GPS_DISABLE'] = float(0) 
+	#change readout text
+	gpsfs = "Inactive"
+        #change button text
+	gpsButton.configure(text='Disable GPS')
 
 def rc():
   #get global button and failsafe readout text
@@ -246,20 +215,20 @@ def rc():
   #if button text says Disable RC
   if rcButton.configure('text')[-1] == 'Disable RC':
 	#Send param to disable RC
-	if mav_param.mavset(sitl, "SIM_RC_FAIL", float(1), retries = 100):
-		#change readout text
-		rfs = "Active"
-		#change button text
-		rcButton.configure(text='Enable RC')
-	#uses mavlink to disable rc
+	vehicle.parameters['SIM_RC_FAIL'] = float(1)
+	#change readout text
+	rfs = "Active"
+	#change button text
+	rcButton.configure(text='Enable RC')
+	
   else:
 	#reactivate RC
-  	if mav_param.mavset(sitl, "SIM_RC_FAIL", float(0), retries = 100):
-		#change readout text
-		rfs = "Inactive"
-		#change button text
-		rcButton.configure(text='Disable RC')
-	#uses mavlink to enable rc
+  	vehicle.parameters['SIM_RC_FAIL'] = float(0)
+	#change readout text
+	rfs = "Inactive"
+	#change button text
+	rcButton.configure(text='Disable RC')
+	
 
 def throttle():
   #create parameter dictionary
@@ -269,18 +238,18 @@ def throttle():
   #if button says to Activate Throttle Failsafe
   if thrButton.configure('text')[-1] == 'Activate Throttle Failsafe':
 	#set throttle failsafe
-  	if mav_param.mavset(sitl, "THR_FS_VALUE", float(2000), retries = 100):
-		#change readout
-		tfs = "Active"
-		#change button text
-		thrButton.configure(text="Deactivate Throttle Failsafe")
+        vehicle.parameters['THR_FS_VALUE'] = float(2000)
+	#change readout
+	tfs = "Active"
+	#change button text
+	thrButton.configure(text="Deactivate Throttle Failsafe")
   else:
 	#Set Throttle pwn failsafe value back to normal
-	if mav_param.mavset(sitl, "THR_FS_VALUE", float(THR_FS_VAL), retries = 100):
-		#change button text
-		thrButton.configure(text="Activate Throttle Failsafe")
-		#change readout text
-		tfs = "Inactive"
+	vehicle.parameters['THR_FS_VALUE'] = float(THR_FS_VAL)
+	#change button text
+	thrButton.configure(text="Activate Throttle Failsafe")
+	#change readout text
+	tfs = "Inactive"
 	
 def battery():
   #create param dictionary
@@ -290,18 +259,18 @@ def battery():
   #if button text says to activate battery failsafe
   if battButton.configure('text')[-1] == 'Activate Battery Failsafe':
 	#set battery FS value above current capacity
-  	if mav_param.mavset(sitl, "FS_BATT_MAH", float(4000), retries = 100):
-		#set readout text
-		bfs = "Active"
-		#set button text
-		battButton.configure(text="Deactivate Battery Failsafe")
+  	vehicle.parameters['FS_BATT_MAH'] = float(4000)
+	#set readout text
+	bfs = "Active"
+	#set button text
+	battButton.configure(text="Deactivate Battery Failsafe")
   else:
 	#set battery capacity back to normal
-	if mav_param.mavset(sitl, "FS_BATT_MAH", float(FS_BATT_MAH), retries = 100):
-		#set readout
-		bfs = "Inactive"
-		#set button text
-		battButton.configure(text="Activate Battery Failsafe")
+	vehicle.parameters['FS_BATT_MAH'] = float(FS_BATT_MAH)
+	#set readout
+	bfs = "Inactive"
+	#set button text
+	battButton.configure(text="Activate Battery Failsafe")
 
 def gcs():
   #create param dict
@@ -311,18 +280,18 @@ def gcs():
   #if button says Disconnect GCS
   if GCSButton.configure('text')[-1] == 'Disconnect GCS':
 	#set GCS ID to something unrecognizable to the vehicle
-  	if mav_param.mavset(sitl, "SYSID_MYGCS", float(0), retries = 100):
-		#change button text
-		GCSButton.configure(text="Reconnect GCS")
-		#change readout
-		gcsfs = "Active"
+        vehicle.parameters['SYSID_MYGCS'] = float(0)
+	#change button text
+	GCSButton.configure(text="Reconnect GCS")
+	#change readout
+	gcsfs = "Active"
   else:
 	#set GCS id back
-   	if mav_param.mavset(sitl, "SYSID_MYGCS", float(SYSID_MYGCS), retries = 100):
-		#change button text
-  		GCSButton.configure(text="Disconnect GCS")
-		#change readout
-  		gcsfs = "Inactive"
+   	vehicle.parameters['SYSID_MYGCS'] = float(SYSID_MYGCS)	
+        #change button text
+  	GCSButton.configure(text="Disconnect GCS")
+	#change readout
+  	gcsfs = "Inactive"
   
 #adds faults to the window
 def createFaultButtons(pane):
